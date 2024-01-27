@@ -1,36 +1,168 @@
-version: '3.7'
+x-otel-common:
+  &otel-common
+  OTEL_LOG_LEVEL: warning
+  OTEL_TRACES_SAMPLER: parentbased_always_on
+  OTEL_PHP_AUTOLOAD_ENABLED: true
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: grpc
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://collector:4317"
+
+version: "3.7"
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./docker/php/home/.bashrc:/root/.bashrc
+    depends_on:
+      - nginx
+    environment:
+      <<: *otel-common
+      OTEL_SERVICE_NAME: yssy-example-app
+      OTEL_RESOURCE_ATTRIBUTES: 'service.version=0.1'
 
-    prometheus:
-        image: prom/prometheus:latest
-        volumes:
-            - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-            - ./prometheus/data:/prometheus
-        ports:
-            - "9090:9090"
-        command:
-          - '--config.file=/etc/prometheus/prometheus.yml'
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "8989:80"
+      - "443:443"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/:/etc/nginx/conf.d/
+    environment:
+      <<: *otel-common
+      OTEL_SERVICE_NAME: service-one
+      OTEL_RESOURCE_ATTRIBUTES: 'service.version=0.2'
 
-    grafana:
-        image: grafana/grafana:latest
-        ports:
-            - "3000:3000"
-        volumes:
-            - ./grafana/data:/var/lib/grafana/data
-        depends_on:
-            - prometheus
+  collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: always
+    command:
+      - --config=/etc/otelcol-contrib/otel-collector.yml
+    volumes:
+      - ./docker/collector/otel-collector.yml:/etc/otelcol-contrib/otel-collector.yml
+    ports:
+      - "1888:1888" # pprof extension
+      - "8888:8888" # Prometheus metrics exposed by the collector
+      - "8889:8889" # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP http receiver
+      - "55679:55679" # zpages extension
+    depends_on:
+      - jaeger
+      - zipkin
 
-    zipkin:
-        image: openzipkin/zipkin-slim
-        ports:
-            - "9411:9411"
+  prometheus:
+      image: prom/prometheus:v2.49.1
+      container_name: prometheus
+      restart: always
+      volumes:
+          - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      ports:
+          - "9090:9090"
+      command:
+        - '--config.file=/etc/prometheus/prometheus.yml'
 
-    jaeger:
-        image: jaegertracing/all-in-one
-        environment:
-            COLLECTOR_ZIPKIN_HOST_PORT: 9412
+  grafana:
+      image: grafana/grafana:latest-ubuntu
+      container_name: grafana
+      restart: always
+      ports:
+          - "3000:3000"
+      volumes:
+        - ./docker/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+        - ./docker/grafana/data:/var/lib/grafana/data
+      environment:
+        GF_SECURITY_ADMIN_USER: 'admin'
+        GF_SECURITY_ADMIN_PASSWORD: 'admin'
+      depends_on:
+          - prometheus
 
-        ports:
-            - "9412:9412"
-            - "16686:16686"
+  zipkin:
+      image: openzipkin/zipkin:latest
+      container_name: zipkin
+      restart: always
+      ports:
+          - "9411:9411"
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yml" ]
+    volumes:
+      - ./docker/tempo/tempo.yml:/etc/tempo.yml
+    ports:
+      - "3200:3200"   # tempo
+      - "4317"  # otlp grpc#
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  jaeger:
+      image: jaegertracing/all-in-one:1.53
+      container_name: jaeger
+      restart: always
+      environment:
+        - COLLECTOR_ZIPKIN_HOST_PORT=9411
+      ports:
+        - "6831:6831/udp"
+        - "6832:6832/udp"
+        - "5778:5778"
+        - "16686:16686"
+        - "14250:14250"
+        - "14268:14268"
+        - "14269:14269"
+
+  mysql:
+    image: mysql:5.7.22
+    container_name: mysql
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_ROOT_PASSWORD: password
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - dbdata:/var/lib/mysql/
+      - ./docker/mysql/my.cnf:/etc/mysql/my.cnf
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    volumes:
+      - ./docker/redis/data:/data
+    ports:
+      - "6379:6379"
+
+  locust:
+    image: locustio/locust
+    container_name: locust
+    volumes:
+      - ./docker/locust/locustfile.py:/mnt/locust/locustfile.py
+    ports:
+      - "8089:8089"
+    command: -f /mnt/locust/locustfile.py --host http://localhost:8989/api/hello
+
+
+volumes:
+  dbdata:
+    driver: local      

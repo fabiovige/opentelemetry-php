@@ -1,0 +1,6 @@
+export OTEL_PHP_AUTOLOAD_ENABLED=true
+export OTEL_SERVICE_NAME=yssy-app-3
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://collector:4317"
+export OTEL_PROPAGATORS=baggage,tracecontext

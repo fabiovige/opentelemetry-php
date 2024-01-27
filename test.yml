@@ -1,0 +1,26 @@
+config:
+  target: 'http://localhost:8989'
+  phases:
+    - duration: 60
+      arrivalRate: 50
+
+scenarios:
+  - flow:
+      - get:
+          url: "/api/hello"
+          headers:
+            x-request-id: "12345"
+            x-b3-traceid: "123456789abcdef"
+            x-b3-spanid: "abcdef123456"
+            x-b3-parentspanid: "123456789"
+            x-b3-sampled: "1"
+      - post:
+          url: "/api/create"
+          headers:
+            Content-Type: "application/json"
+            x-request-id: "67890"
+            x-b3-traceid: "abcdef123456789"
+            x-b3-spanid: "123456abcdef"
+            x-b3-parentspanid: "abcdef123456"
+            x-b3-sampled: "1"
+          body: '{"message": "Hello, Artillery!"}'
