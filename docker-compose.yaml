@@ -73,6 +73,10 @@ services:
           - "9090:9090"
       command:
         - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--enable-feature=exemplar-storage'
+        - '--enable-feature=extra-scrape-metrics'
+        - '--enable-feature=otlp-write-receiver'
+        - '--enable-feature=promql-experimental-functions'
 
   grafana:
       image: grafana/grafana:latest-ubuntu
@@ -83,6 +87,7 @@ services:
       volumes:
         - ./docker/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
         - ./docker/grafana/data:/var/lib/grafana/data
+        - grafana_data:/var/lib/grafana
       environment:
         GF_SECURITY_ADMIN_USER: 'admin'
         GF_SECURITY_ADMIN_PASSWORD: 'admin'
@@ -112,7 +117,9 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "3100:3100"
-
+    volumes:
+      - loki_data:/data/loki
+      
   jaeger:
       image: jaegertracing/all-in-one:1.53
       container_name: jaeger
@@ -162,7 +169,21 @@ services:
       - "8089:8089"
     command: -f /mnt/locust/locustfile.py --host http://localhost:8989/api/hello
 
+  grafana-agent:
+    image: grafana/agent:latest
+    container_name: grafana-agent
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/agent/config.river
+    volumes:
+      - ./docker/grafana-flow/config.river:/etc/agent/config.river
+    ports:
+      - "12345:12345"
+    environment:
+      - AGENT_MODE=flow
 
 volumes:
   dbdata:
     driver: local      
+  grafana_data:  
+    driver: local 
+  loki_data:  
+    driver: local     

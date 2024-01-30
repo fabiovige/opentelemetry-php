@@ -35,6 +35,9 @@ exporters:
     tls:
       insecure: true
 
+connectors:
+  spanmetrics:
+
 extensions:
   health_check:
   pprof:
@@ -44,13 +47,13 @@ service:
   extensions: [health_check, pprof, zpages]
   pipelines:
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, spanmetrics]
       processors: [batch]
       exporters: [prometheus]
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger,zipkin,otlp]
+      exporters: [otlp/jaeger,zipkin,otlp,spanmetrics]
     logs:
       receivers: [otlp]
       exporters: [loki]

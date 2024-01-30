@@ -10,8 +10,14 @@ class HelloController extends Controller
 
     public function index()
     {
-        $user = User::all();
-        return response()->json(['message' => 'LISTA!', 'data' => $user]);
+        try {
+                $user = User::all();
+            
+            return response()->json(['message' => 'Lista de usuarios', 'data' => $user]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Usuário não encontrado.'], 404);
+        }
     }
 
     public function store(Request $request)
@@ -39,17 +45,15 @@ class HelloController extends Controller
     public function show($id)
     {
         try {
-            foreach (range(21, 300) as $i) {
-                $seconds = rand(1, 1);
-                sleep($seconds);
-                echo 'teste' . $i . PHP_EOL;
-
-                $user = User::findOrFail($id);
+            foreach (range(1, 100) as $i) {
+                $seconds = rand(1, 10);
+                //sleep($seconds);
+                $user = Users::findOrFail($id);
             }
             return response()->json(['message' => 'Detalhes do Usuário', 'data' => $user]);
 
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Usuário não encontrado.'], 404);
+            //return response()->json(['message' => 'Usuário não encontrado.'], 404);
         }
     }
 
